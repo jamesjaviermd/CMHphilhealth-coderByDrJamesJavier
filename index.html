@@ -156,50 +156,18 @@
 <script>
   let icdData = [];
   let rvsData = [];
+  let icdRvsMap = {};
   let currentMode = 'icd10'; // 'icd10' or 'rvs'
 
-  // Corrected PhilHealth RVS Code Correlation Mapping Table
-  const clinicalCorrelationMap = {
-    "K35": ["44950", "44960"],          // Acute Appendicitis -> Appendectomy (44950), with ruptured appendicitis/peritonitis (44960)
-    "K37": ["44950", "44960"],          // Unspecified Appendicitis -> Appendectomy
-    "K80": ["47562", "47600"],          // Cholelithiasis -> Laparoscopic Cholecystectomy (47562), Open (47600)
-    "K81": ["47562", "47600"],          // Cholecystitis -> Laparoscopic / Open Cholecystectomy
-    "K40": ["49505", "49507"],          // Inguinal Hernia -> Inguinal Hernioplasty/Herniorrhaphy
-    "K41": ["49520", "49525"],          // Femoral Hernia -> Hernioplasty
-    "K42": ["49580", "49585"],          // Umbilical Hernia -> Repair
-    "K85": ["48150", "48540"],          // Acute Pancreatitis
-    "H25": ["66984", "66982"],          // Cataract -> Extracapsular Cataract Removal / Phacoemulsification
-    "H26": ["66984"],
-    "O80": ["59400", "59409", "59410"], // Vaginal Delivery
-    "O82": ["59510", "59514", "59515"], // Cesarean Section
-    "S82": ["27750", "27752", "27758"], // Tibia Fracture -> Closed/Open Treatment / ORIF
-    "S72": ["27230", "27236", "27244"], // Femur Fracture -> Open/Closed Fixation / Bipolar Arthroplasty
-    "S52": ["25500", "25515", "25565"], // Radius/Ulna Fracture -> ORIF
-    "J35.1": ["42820", "42821"],        // Hypertrophy of tonsils -> Tonsillectomy
-    "J35.2": ["42830", "42831"],        // Hypertrophy of adenoids -> Adenoidectomy
-    "N40": ["52601", "55801"],          // BPH -> TURP / Prostatectomy
-    "E04": ["60220", "60240"]           // Goiter -> Thyroidectomy
-  };
-
-  // Clinical Synonym Dictionary for Cross-Query Matching
-  const clinicalSynonyms = {
-    "appendicitis": ["appendectomy", "44950", "44960"],
-    "cholecystitis": ["cholecystectomy", "gallbladder", "47562", "47600"],
-    "gallstone": ["cholecystectomy", "47562"],
-    "cataract": ["phacoemulsification", "extracapsular", "66984"],
-    "hernia": ["herniorrhaphy", "hernioplasty", "49505"],
-    "fracture": ["orif", "closed reduction", "fixation"],
-    "goiter": ["thyroidectomy", "60220"],
-    "tonsillitis": ["tonsillectomy", "42820"]
-  };
-
-  // Fetch JSON files on initialization
+  // Option 2: Fetch external icd_rvs_map.json alongside ICD and RVS JSON databases
   Promise.all([
     fetch('icd10_codes.json').then(res => res.json()),
-    fetch('rvs_codes.json').then(res => res.json())
-  ]).then(([icd, rvs]) => {
+    fetch('rvs_codes.json').then(res => res.json()),
+    fetch('icd_rvs_map.json').then(res => res.json()).catch(() => ({})) // Graceful fallback if map file is not found
+  ]).then(([icd, rvs, map]) => {
     icdData = icd;
     rvsData = rvs;
+    icdRvsMap = map;
     document.getElementById('statusBar').innerText = `Loaded ${icdData.length.toLocaleString()} ICD-10 codes and ${rvsData.length.toLocaleString()} RVS codes.`;
     renderTable();
   }).catch(err => {
@@ -250,45 +218,19 @@
     return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
   }
 
-  // Expand query tokens using clinical synonym dictionary
-  function getExpandedTokens(tokens) {
-    let expanded = [...tokens];
-    tokens.forEach(tok => {
-      const syns = clinicalSynonyms[tok.toLowerCase()];
-      if (syns) {
-        expanded.push(...syns);
-      }
-    });
-    return expanded;
-  }
-
-  // Helper to retrieve associated RVS codes for an ICD-10 record using clinical correlation
+  // Option 2 Cross-Reference Lookup Helper
   function getRelatedRVSHTML(item) {
-    let matchedRVS = [];
+    // Lookup RVS mapping using the ICD-10 code key from external icd_rvs_map.json
+    const rawRvs = item.code ? icdRvsMap[item.code] || icdRvsMap[String(item.code).trim()] : null;
 
-    // Priority 1: Direct JSON property (item.rvs, item.rvs_code, or item.rvs_codes)
-    if (item.rvs || item.rvs_code || item.rvs_codes) {
-      const rawRvs = item.rvs || item.rvs_code || item.rvs_codes;
-      matchedRVS = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
-    }
+    if (rawRvs) {
+      const rvsList = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
 
-    // Priority 2: Clinical Correlation Map lookup (exact code or category prefix matching)
-    if (matchedRVS.length === 0 && item.code) {
-      const cleanCode = String(item.code).trim().toUpperCase();
-      const prefix3 = cleanCode.substring(0, 3);
-      
-      if (clinicalCorrelationMap[cleanCode]) {
-        matchedRVS = clinicalCorrelationMap[cleanCode];
-      } else if (clinicalCorrelationMap[prefix3]) {
-        matchedRVS = clinicalCorrelationMap[prefix3];
+      if (rvsList.length > 0) {
+        return rvsList.map(code => 
+          `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}')">${code}</span>`
+        ).join(' ');
       }
-    }
-
-    // Render badges if codes were correlated
-    if (matchedRVS.length > 0) {
-      return matchedRVS.map(code => 
-        `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}')">${code}</span>`
-      ).join(' ');
     }
 
     return '<span style="color: #999; font-size: 0.8rem;">None</span>';
@@ -300,8 +242,7 @@
     const tbody = document.getElementById('tableBody');
 
     tbody.innerHTML = '';
-    const rawTokens = query.split(/\s+/).filter(Boolean);
-    const queryTokens = getExpandedTokens(rawTokens);
+    const queryTokens = query.split(/\s+/).filter(Boolean);
 
     if (currentMode === 'icd10') {
       thead.innerHTML = `
@@ -316,12 +257,12 @@
       `;
 
       const filtered = icdData.filter(item => {
-        if (rawTokens.length === 0) return true;
+        if (queryTokens.length === 0) return true;
         const code = String(item.code || '').toLowerCase();
         const desc = String(item.description || '').toLowerCase();
         const combined = `${code} ${desc}`;
 
-        return queryTokens.some(token => 
+        return queryTokens.every(token => 
           combined.includes(token) || fuzzyMatchWord(desc, token)
         );
       }).slice(0, 100);
@@ -357,12 +298,12 @@
       `;
 
       const filtered = rvsData.filter(item => {
-        if (rawTokens.length === 0) return true;
+        if (queryTokens.length === 0) return true;
         const code = String(item.code || '').toLowerCase();
         const desc = String(item.description || '').toLowerCase();
         const combined = `${code} ${desc}`;
 
-        return queryTokens.some(token => 
+        return queryTokens.every(token => 
           combined.includes(token) || fuzzyMatchWord(desc, token)
         );
       }).slice(0, 100);
