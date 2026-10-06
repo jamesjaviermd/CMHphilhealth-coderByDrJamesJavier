@@ -156,15 +156,18 @@
 <script>
   let icdData = [];
   let rvsData = [];
+  let icdRvsMap = {};
   let currentMode = 'icd10'; // 'icd10' or 'rvs'
 
-  // Fetch JSON files on initialization
+  // Option 2: Fetch external icd_rvs_map.json alongside ICD and RVS JSON databases
   Promise.all([
     fetch('icd10_codes.json').then(res => res.json()),
-    fetch('rvs_codes.json').then(res => res.json())
-  ]).then(([icd, rvs]) => {
+    fetch('rvs_codes.json').then(res => res.json()),
+    fetch('icd_rvs_map.json').then(res => res.json()).catch(() => ({})) // Graceful fallback if map file is not found
+  ]).then(([icd, rvs, map]) => {
     icdData = icd;
     rvsData = rvs;
+    icdRvsMap = map;
     document.getElementById('statusBar').innerText = `Loaded ${icdData.length.toLocaleString()} ICD-10 codes and ${rvsData.length.toLocaleString()} RVS codes.`;
     renderTable();
   }).catch(err => {
@@ -215,13 +218,14 @@
     return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
   }
 
-  // Option 1 Direct Property Extraction
+  // Option 2 Cross-Reference Lookup Helper
   function getRelatedRVSHTML(item) {
-    const rawRvs = item.rvs || item.rvs_code || item.rvs_codes;
-    
+    // Lookup RVS mapping using the ICD-10 code key from external icd_rvs_map.json
+    const rawRvs = item.code ? icdRvsMap[item.code] || icdRvsMap[String(item.code).trim()] : null;
+
     if (rawRvs) {
       const rvsList = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
-      
+
       if (rvsList.length > 0) {
         return rvsList.map(code => 
           `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}')">${code}</span>`
