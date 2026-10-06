@@ -218,16 +218,26 @@
     return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
   }
 
-  // Option 2 Flexible Cross-Reference Lookup Helper
+  // Robust Normalization Lookup Helper
   function getRelatedRVSHTML(item) {
     if (!item.code) return '<span style="color: #999; font-size: 0.8rem;">None</span>';
 
-    const cleanCode = String(item.code).trim().toUpperCase();
-    const codeWithoutDot = cleanCode.replace(/\./g, '');
-    const prefix3 = cleanCode.substring(0, 3);
+    const rawCode = String(item.code).trim().toUpperCase();
+    const dotlessCode = rawCode.replace(/\./g, '');
+    
+    // Create standard dotted version if missing (e.g., K800 -> K80.0)
+    let dottedCode = rawCode;
+    if (!rawCode.includes('.') && rawCode.length > 3) {
+      dottedCode = rawCode.substring(0, 3) + '.' + rawCode.substring(3);
+    }
+    
+    const prefix3 = rawCode.substring(0, 3);
 
-    // Flexible matching order: Exact Code -> Dotless Code -> 3-Character Prefix
-    const rawRvs = icdRvsMap[cleanCode] || icdRvsMap[codeWithoutDot] || icdRvsMap[prefix3];
+    // Try all possible representations in order
+    const rawRvs = icdRvsMap[rawCode] || 
+                    icdRvsMap[dotlessCode] || 
+                    icdRvsMap[dottedCode] || 
+                    icdRvsMap[prefix3];
 
     if (rawRvs) {
       const rvsList = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
