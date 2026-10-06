@@ -113,6 +113,13 @@
     .badge-yes { background: #e8f5e9; color: #2e7d32; }
     .badge-no { background: #ffebee; color: #c62828; }
     .badge-sex { background: #e3f2fd; color: #1565c0; }
+    .badge-rvs { 
+      background: #fff3e0; 
+      color: #e65100; 
+      border: 1px solid #ffe0b2;
+      margin: 2px 4px 2px 0;
+      cursor: pointer;
+    }
     .no-results {
       text-align: center;
       padding: 30px;
@@ -165,12 +172,12 @@
     console.error(err);
   });
 
-  function switchTab(mode) {
+  function switchTab(mode, initialQuery = '') {
     currentMode = mode;
     document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
       btn.classList.toggle('active', (mode === 'icd10' && idx === 0) || (mode === 'rvs' && idx === 1));
     });
-    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').value = initialQuery;
     renderTable();
   }
 
@@ -201,11 +208,26 @@
 
   // Check if target text contains any word close to search token
   function fuzzyMatchWord(targetText, searchToken) {
-    if (searchToken.length < 3) return false; // Ignore fuzzy matching for short words/codes
+    if (searchToken.length < 3) return false;
     const words = targetText.toLowerCase().split(/\W+/);
     const maxAllowedDistance = searchToken.length > 6 ? 2 : 1;
 
     return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
+  }
+
+  // Helper to retrieve associated RVS codes for an ICD-10 record
+  function getRelatedRVSHTML(item) {
+    // Case 1: JSON explicitly provides mapped RVS codes (e.g., item.rvs = ["47600", "47610"] or item.rvs_code = "47600")
+    if (item.rvs || item.rvs_code || item.rvs_codes) {
+      const rawRvs = item.rvs || item.rvs_code || item.rvs_codes;
+      const rvsList = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
+      
+      return rvsList.map(code => 
+        `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}')">${code}</span>`
+      ).join(' ');
+    }
+
+    return '<span style="color: #999; font-size: 0.8rem;">None</span>';
   }
 
   function renderTable() {
@@ -214,18 +236,17 @@
     const tbody = document.getElementById('tableBody');
 
     tbody.innerHTML = '';
-
-    // Split search query into tokenized words
     const queryTokens = query.split(/\s+/).filter(Boolean);
 
     if (currentMode === 'icd10') {
       thead.innerHTML = `
         <tr>
-          <th style="width: 15%;">ICD-10 Code</th>
-          <th style="width: 50%;">Diagnosis Description</th>
-          <th style="width: 15%;">Acceptable PDx</th>
-          <th style="width: 10%;">Sex</th>
-          <th style="width: 10%;">MDC Category</th>
+          <th style="width: 12%;">ICD-10 Code</th>
+          <th style="width: 42%;">Diagnosis Description</th>
+          <th style="width: 18%;">Related RVS Code(s)</th>
+          <th style="width: 12%;">Acceptable PDx</th>
+          <th style="width: 8%;">Sex</th>
+          <th style="width: 8%;">MDC</th>
         </tr>
       `;
 
@@ -241,16 +262,19 @@
       }).slice(0, 100);
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="no-results">No matching ICD-10 diagnoses found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="no-results">No matching ICD-10 diagnoses found.</td></tr>`;
         return;
       }
 
       filtered.forEach(item => {
         const pdxClass = item.pdx_acceptable === 'Yes' ? 'badge-yes' : 'badge-no';
+        const rvsHTML = getRelatedRVSHTML(item);
+
         tbody.innerHTML += `
           <tr>
             <td><strong>${item.code || '-'}</strong></td>
             <td>${item.description || '-'}</td>
+            <td>${rvsHTML}</td>
             <td><span class="badge ${pdxClass}">${item.pdx_acceptable || 'N/A'}</span></td>
             <td><span class="badge badge-sex">${item.sex || 'Both'}</span></td>
             <td>${item.mdc || '-'}</td>
