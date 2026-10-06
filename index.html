@@ -29,6 +29,9 @@
       padding: 15px 20px;
       border-radius: 8px;
       margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
     header h1 {
       margin: 0;
@@ -38,6 +41,20 @@
       margin: 5px 0 0 0;
       font-size: 0.9rem;
       opacity: 0.9;
+    }
+    .back-btn {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      padding: 8px 14px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.35);
     }
     .tabs {
       display: flex;
@@ -132,8 +149,11 @@
 
 <div class="container">
   <header>
-    <h1>Cainta Municipal Hospital - PhilHealth Coding Lookup</h1>
-    <p>Search official PHL-DRG ICD-10 Diagnoses and RVS Surgical/Medical Procedures</p>
+    <div>
+      <h1>Cainta Municipal Hospital - PhilHealth Coding Lookup</h1>
+      <p>Search official PHL-DRG ICD-10 Diagnoses and RVS Surgical/Medical Procedures</p>
+    </div>
+    <button class="back-btn" onclick="window.history.back()">&#8592; Back</button>
   </header>
 
   <div class="tabs">
