@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhilHealth ICD-10 & RVS Lookup Tool by James Javier PTRP MD CFP MHA<</title>
+  <title>PhilHealth ICD-10 & RVS Lookup Tool</title>
   <style>
     :root {
       --primary: #006699;
@@ -113,13 +113,19 @@
     .badge-yes { background: #e8f5e9; color: #2e7d32; }
     .badge-no { background: #ffebee; color: #c62828; }
     .badge-sex { background: #e3f2fd; color: #1565c0; }
+    .no-results {
+      text-align: center;
+      padding: 30px;
+      color: #777;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
   <header>
-    <h1>Cainta Municipal Hospital - PhilHealth Coding Lookup by James Javier PTRP MD CFP MHA</h1>
+    <h1>Cainta Municipal Hospital - PhilHealth Coding Lookup</h1>
     <p>Search official PHL-DRG ICD-10 Diagnoses and RVS Surgical/Medical Procedures</p>
   </header>
 
@@ -172,12 +178,45 @@
     renderTable();
   }
 
+  // Calculate edit distance between strings for typo tolerance
+  function levenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = Array.from({ length: a.length + 1 }, () => []);
+    for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+    for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,       // deletion
+          matrix[i][j - 1] + 1,       // insertion
+          matrix[i - 1][j - 1] + cost // substitution
+        );
+      }
+    }
+    return matrix[a.length][b.length];
+  }
+
+  // Check if target text contains any word close to search token
+  function fuzzyMatchWord(targetText, searchToken) {
+    if (searchToken.length < 3) return false; // Ignore fuzzy matching for short words/codes
+    const words = targetText.toLowerCase().split(/\W+/);
+    const maxAllowedDistance = searchToken.length > 6 ? 2 : 1;
+
+    return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
+  }
+
   function renderTable() {
     const query = document.getElementById('searchInput').value.toLowerCase().trim();
     const thead = document.getElementById('tableHead');
     const tbody = document.getElementById('tableBody');
 
     tbody.innerHTML = '';
+
+    // Split search query into tokenized words
+    const queryTokens = query.split(/\s+/).filter(Boolean);
 
     if (currentMode === 'icd10') {
       thead.innerHTML = `
@@ -190,19 +229,30 @@
         </tr>
       `;
 
-      const filtered = icdData.filter(item => 
-        String(item.code || '').toLowerCase().includes(query) || 
-        String(item.description || '').toLowerCase().includes(query)
-      ).slice(0, 100); // Limit to top 100 results for speed
+      const filtered = icdData.filter(item => {
+        if (queryTokens.length === 0) return true;
+        const code = String(item.code || '').toLowerCase();
+        const desc = String(item.description || '').toLowerCase();
+        const combined = `${code} ${desc}`;
+
+        return queryTokens.every(token => 
+          combined.includes(token) || fuzzyMatchWord(desc, token)
+        );
+      }).slice(0, 100);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="no-results">No matching ICD-10 diagnoses found.</td></tr>`;
+        return;
+      }
 
       filtered.forEach(item => {
         const pdxClass = item.pdx_acceptable === 'Yes' ? 'badge-yes' : 'badge-no';
         tbody.innerHTML += `
           <tr>
-            <td><strong>${item.code}</strong></td>
-            <td>${item.description}</td>
-            <td><span class="badge ${pdxClass}">${item.pdx_acceptable}</span></td>
-            <td><span class="badge badge-sex">${item.sex}</span></td>
+            <td><strong>${item.code || '-'}</strong></td>
+            <td>${item.description || '-'}</td>
+            <td><span class="badge ${pdxClass}">${item.pdx_acceptable || 'N/A'}</span></td>
+            <td><span class="badge badge-sex">${item.sex || 'Both'}</span></td>
             <td>${item.mdc || '-'}</td>
           </tr>
         `;
@@ -217,17 +267,28 @@
         </tr>
       `;
 
-      const filtered = rvsData.filter(item => 
-        String(item.code || '').toLowerCase().includes(query) || 
-        String(item.description || '').toLowerCase().includes(query)
-      ).slice(0, 100);
+      const filtered = rvsData.filter(item => {
+        if (queryTokens.length === 0) return true;
+        const code = String(item.code || '').toLowerCase();
+        const desc = String(item.description || '').toLowerCase();
+        const combined = `${code} ${desc}`;
+
+        return queryTokens.every(token => 
+          combined.includes(token) || fuzzyMatchWord(desc, token)
+        );
+      }).slice(0, 100);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="no-results">No matching RVS procedures found.</td></tr>`;
+        return;
+      }
 
       filtered.forEach(item => {
         tbody.innerHTML += `
           <tr>
-            <td><strong>${item.code}</strong></td>
-            <td>${item.description}</td>
-            <td><span class="badge badge-sex">${item.sex}</span></td>
+            <td><strong>${item.code || '-'}</strong></td>
+            <td>${item.description || '-'}</td>
+            <td><span class="badge badge-sex">${item.sex || 'Both'}</span></td>
           </tr>
         `;
       });
