@@ -51,10 +51,14 @@
       font-weight: 600;
       border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.2s, opacity 0.2s;
     }
-    .back-btn:hover {
+    .back-btn:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.35);
+    }
+    .back-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
     .tabs {
       display: flex;
@@ -153,7 +157,7 @@
       <h1>Cainta Municipal Hospital - PhilHealth Coding Lookup</h1>
       <p>Search official PHL-DRG ICD-10 Diagnoses and RVS Surgical/Medical Procedures</p>
     </div>
-    <button class="back-btn" onclick="window.history.back()">&#8592; Back</button>
+    <button id="backBtn" class="back-btn" onclick="goBackInSearch()" disabled>&#8592; Back</button>
   </header>
 
   <div class="tabs">
@@ -179,6 +183,10 @@
   let icdRvsMap = {};
   let currentMode = 'icd10'; // 'icd10' or 'rvs'
 
+  // Search/Navigation history stack
+  let searchHistory = [];
+  let isNavigatingBack = false;
+
   // Option 2: Fetch external icd_rvs_map.json alongside ICD and RVS JSON databases
   Promise.all([
     fetch('icd10_codes.json').then(res => res.json()),
@@ -195,13 +203,40 @@
     console.error(err);
   });
 
-  function switchTab(mode, initialQuery = '') {
+  function updateBackBtnState() {
+    const btn = document.getElementById('backBtn');
+    btn.disabled = searchHistory.length === 0;
+  }
+
+  function switchTab(mode, initialQuery = '', isBadgeClick = false) {
+    const currentQuery = document.getElementById('searchInput').value;
+
+    // Push current state to history if switching context via badge click or manual tab click
+    if (!isNavigatingBack && (isBadgeClick || (currentQuery.trim() !== '' && currentMode !== mode))) {
+      searchHistory.push({
+        mode: currentMode,
+        query: currentQuery
+      });
+      updateBackBtnState();
+    }
+
     currentMode = mode;
     document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
       btn.classList.toggle('active', (mode === 'icd10' && idx === 0) || (mode === 'rvs' && idx === 1));
     });
     document.getElementById('searchInput').value = initialQuery;
     renderTable();
+  }
+
+  function goBackInSearch() {
+    if (searchHistory.length === 0) return;
+
+    isNavigatingBack = true;
+    const prevState = searchHistory.pop();
+    updateBackBtnState();
+
+    switchTab(prevState.mode, prevState.query);
+    isNavigatingBack = false;
   }
 
   function handleSearch() {
@@ -264,7 +299,7 @@
 
       if (rvsList.length > 0) {
         return rvsList.map(code => 
-          `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}')">${code}</span>`
+          `<span class="badge badge-rvs" title="Click to lookup RVS ${code}" onclick="switchTab('rvs', '${code}', true)">${code}</span>`
         ).join(' ');
       }
     }
