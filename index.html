@@ -218,10 +218,16 @@
     return words.some(word => levenshteinDistance(word, searchToken) <= maxAllowedDistance);
   }
 
-  // Option 2 Cross-Reference Lookup Helper
+  // Option 2 Flexible Cross-Reference Lookup Helper
   function getRelatedRVSHTML(item) {
-    // Lookup RVS mapping using the ICD-10 code key from external icd_rvs_map.json
-    const rawRvs = item.code ? icdRvsMap[item.code] || icdRvsMap[String(item.code).trim()] : null;
+    if (!item.code) return '<span style="color: #999; font-size: 0.8rem;">None</span>';
+
+    const cleanCode = String(item.code).trim().toUpperCase();
+    const codeWithoutDot = cleanCode.replace(/\./g, '');
+    const prefix3 = cleanCode.substring(0, 3);
+
+    // Flexible matching order: Exact Code -> Dotless Code -> 3-Character Prefix
+    const rawRvs = icdRvsMap[cleanCode] || icdRvsMap[codeWithoutDot] || icdRvsMap[prefix3];
 
     if (rawRvs) {
       const rvsList = Array.isArray(rawRvs) ? rawRvs : String(rawRvs).split(',').map(s => s.trim());
